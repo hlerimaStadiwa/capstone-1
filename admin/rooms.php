@@ -45,7 +45,7 @@ $other_rooms = $db->query($other_rooms_query)->fetchAll(PDO::FETCH_ASSOC);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Rooms - Student Management System</title>
+    <title>Manage Rooms - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
     <style>
         .room-stats { display: flex; gap: 10px; margin-top: 5px; font-size: 0.9em; color: #666; }

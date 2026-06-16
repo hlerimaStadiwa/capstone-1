@@ -16,11 +16,14 @@ $error = '';
 $success = '';
 $action = isset($_GET['action']) ? $_GET['action'] : 'list';
 $student_id = isset($_GET['student_id']) ? $_GET['student_id'] : '';
+$student_search = isset($_GET['student_search']) ? trim($_GET['student_search']) : '';
+$classroom_filter = isset($_GET['classroom_id']) ? trim($_GET['classroom_id']) : '';
 
 // 2. Handle Form Submission (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
     $target_student_id = $_POST['student_id'];
-    $amount = $_POST['amount'];
+    $amount_raw = trim($_POST['amount'] ?? '');
+    $amount = str_replace(',', '', $amount_raw);
     $payment_date = $_POST['payment_date'];
     $payment_method = $_POST['payment_method'];
     $fee_type = $_POST['fee_type'];
@@ -28,22 +31,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
     $recorded_by = $_SESSION['user_id'];
 
     try {
-        if (empty($target_student_id) || empty($amount) || empty($payment_date)) {
+        if (empty($target_student_id) || $amount === '' || empty($payment_date)) {
             throw new Exception("All required fields must be filled.");
         }
+
+        $payment_date_ts = strtotime($payment_date);
+        if ($payment_date_ts === false) {
+            throw new Exception("Invalid payment date.");
+        }
+        if ($payment_date_ts > strtotime(date('Y-m-d'))) {
+            throw new Exception("Payment date cannot be in the future.");
+        }
+
+        if (!is_numeric($amount) || floatval($amount) <= 0) {
+            throw new Exception("Amount must be a positive number.");
+        }
+
+        $amount_val = round(floatval($amount), 2);
 
         $stmt = $db->prepare("
             INSERT INTO fees (student_id, amount, payment_date, payment_method, fee_type, remarks, recorded_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$target_student_id, $amount, $payment_date, $payment_method, $fee_type, $remarks, $recorded_by]);
+        $stmt->execute([$target_student_id, $amount_val, $payment_date, $payment_method, $fee_type, $remarks, $recorded_by]);
 
         // Log the action
         $st_stmt = $db->prepare("SELECT full_name FROM students WHERE id = ?");
         $st_stmt->execute([$target_student_id]);
         $student_name = $st_stmt->fetchColumn();
 
-        Logger::log($_SESSION['user_id'], 'Fee Payment', "Recorded payment of $amount for $student_name ($fee_type)");
+        Logger::log($_SESSION['user_id'], 'Fee Payment', "Recorded payment of $" . number_format($amount_val,2) . " for $student_name ($fee_type)");
 
         $_SESSION['success'] = "Payment recorded successfully!";
         header("Location: fees.php?student_id=" . $target_student_id);
@@ -56,13 +73,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
 }
 
 // 3. Search & Filtering (for List View)
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+$search = $student_search;
 $where_clauses = [];
 $params = [];
 
 if (!empty($search)) {
-    $where_clauses[] = "(s.full_name LIKE :search OR s.pin LIKE :search)";
+    $where_clauses[] = "(s.full_name LIKE :search OR s.pin LIKE :search OR r.room_number LIKE :search)";
     $params[':search'] = "%$search%";
+}
+
+if (!empty($classroom_filter)) {
+    $where_clauses[] = "s.classroom_id = :classroom_id";
+    $params[':classroom_id'] = $classroom_filter;
 }
 
 if (!empty($student_id) && $action === 'list') {
@@ -73,11 +95,14 @@ if (!empty($student_id) && $action === 'list') {
 $where_sql = !empty($where_clauses) ? "WHERE " . implode(" AND ", $where_clauses) : "";
 
 // 4. Fetch Data
+$classrooms = $db->query("SELECT id, room_number FROM rooms WHERE room_type = 'Classroom' ORDER BY room_number ASC")->fetchAll(PDO::FETCH_ASSOC);
+
 if ($action === 'list') {
     $query = "
-        SELECT f.*, s.full_name, s.pin, u.username as recorder
+        SELECT f.*, s.full_name, s.pin, r.room_number, u.username as recorder
         FROM fees f
         JOIN students s ON f.student_id = s.id
+        LEFT JOIN rooms r ON s.classroom_id = r.id
         LEFT JOIN users u ON f.recorded_by = u.id
         $where_sql
         ORDER BY f.payment_date DESC, f.created_at DESC
@@ -108,7 +133,7 @@ if ($action === 'list') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fee Management - Student Management System</title>
+    <title>Fee Management - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
     <style>
         .form-container { max-width: 600px; margin: 20px auto; }
@@ -134,10 +159,16 @@ if ($action === 'list') {
 
             <div class="action-bar">
                 <div class="search-box">
-                    <form method="GET" style="display: flex; gap: 10px;">
-                        <input type="text" name="search" placeholder="Search by student name or PIN..." value="<?php echo htmlspecialchars($search); ?>">
-                        <button type="submit" class="btn">Search</button>
-                        <?php if (!empty($search) || !empty($student_id)): ?>
+                    <form method="GET" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <input type="text" name="student_search" placeholder="Search by student name, PIN or class..." value="<?php echo htmlspecialchars($student_search); ?>" style="flex: 1 1 260px; min-width: 220px;">
+                        <select name="classroom_id" style="flex: 0 0 180px;">
+                            <option value="">All Classes</option>
+                            <?php foreach ($classrooms as $cls): ?>
+                                <option value="<?php echo $cls['id']; ?>" <?php echo $classroom_filter == $cls['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($cls['room_number']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button type="submit" class="btn">Filter</button>
+                        <?php if (!empty($student_search) || !empty($classroom_filter) || !empty($student_id)): ?>
                             <a href="fees.php" class="btn">Clear</a>
                         <?php endif; ?>
                     </form>
@@ -199,13 +230,16 @@ if ($action === 'list') {
 
                 <form method="POST">
                     <input type="hidden" name="record_payment" value="1">
-                    <div class="form-group">
+                            <div class="form-group">
                         <label>Select Student *</label>
-                        <select name="student_id" required>
+                        <input type="text" id="student_filter" placeholder="Filter by name, PIN or class..." oninput="filterStudents()" style="margin-bottom: 10px;">
+                        <select name="student_id" id="student_select" required style="max-height: 260px;">
                             <option value="">-- Select Student --</option>
                             <?php foreach ($students as $s): ?>
-                                <option value="<?php echo $s['id']; ?>" <?php echo $student_id == $s['id'] ? 'selected' : ''; ?>>
+                                <?php $meta = htmlspecialchars(strtolower($s['full_name'] . ' ' . $s['pin'] . ' ' . ($s['room_number'] ?? ''))); ?>
+                                <option value="<?php echo $s['id']; ?>" data-meta="<?php echo $meta; ?>" <?php echo $student_id == $s['id'] ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($s['full_name'] . ' (' . $s['pin'] . ')'); ?>
+                                    <?php if (!empty($s['room_number'])): ?> - <?php echo htmlspecialchars($s['room_number']); ?><?php endif; ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -214,11 +248,11 @@ if ($action === 'list') {
                     <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                         <div class="form-group">
                             <label>Amount (USD) *</label>
-                            <input type="number" step="0.01" name="amount" required placeholder="0.00">
+                            <input type="number" step="0.01" name="amount" min="0.01" required placeholder="0.00">
                         </div>
                         <div class="form-group">
                             <label>Payment Date *</label>
-                            <input type="date" name="payment_date" value="<?php echo date('Y-m-d'); ?>" required>
+                            <input type="date" name="payment_date" max="<?php echo date('Y-m-d'); ?>" value="<?php echo date('Y-m-d'); ?>" required>
                         </div>
                     </div>
 
@@ -256,6 +290,19 @@ if ($action === 'list') {
                 </form>
             </div>
         <?php endif; ?>
+
+    </div>
+    <script>
+        function filterStudents() {
+            var filter = document.getElementById('student_filter').value.toLowerCase();
+            var select = document.getElementById('student_select');
+            Array.from(select.options).forEach(function(option) {
+                if (!option.value) return;
+                var meta = option.getAttribute('data-meta') || '';
+                option.hidden = filter.length > 0 && meta.indexOf(filter) === -1;
+            });
+        }
+    </script>
 
     </div>
 

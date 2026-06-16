@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Silver High Academy</title>
+    <title>Danborough College</title>
     <link rel="stylesheet" href="assets/style.css">
     <style>
         .system-status {
@@ -129,25 +129,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     </style>
 </head>
-<body>
-    <div class="form-container">
-        <h2 style="text-align: center; color: #2c3e50; margin-bottom: 10px;">Student Management System</h2>
+<body class="login-page">
+    <div class="form-container login-card">
+        <h2 style="text-align: center; color: #2c3e50; margin-bottom: 10px;">Danborough College</h2>
         <h3 style="text-align: center; color: #7f8c8d; margin-bottom: 30px;">Login to Your Account</h3>
         
         <?php if ($setup_needed): ?>
-            <div class="system-status status-warning">
-                <strong>Setup Required</strong>
-                <p>Database configuration not found. Please complete setup first.</p>
-            </div>
-            
-            <div class="setup-steps">
-                <h4>Setup Instructions:</h4>
-                <ol>
-                    <li><strong>Run Database Setup:</strong> 
-                        <a href="setup_database.php" style="color: #3498db; font-weight: bold;">Click here to setup database</a>
-                    </li>
-                    <li><strong>If setup fails:</strong> Check that MySQL is running in XAMPP</li>
-                </ol>
+            <div class="system-status status-warning" style="text-align: center; margin-bottom: 25px;">
+                <strong style="font-size: 1.1em; display: block; margin-bottom: 5px;">Setup Required</strong>
+                <p style="font-weight: normal; font-size: 0.9em; margin: 0;">Database configuration is missing. Please ensure <code>config/database.php</code> is configured correctly before logging in.</p>
             </div>
         <?php endif; ?>
         

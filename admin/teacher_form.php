@@ -198,7 +198,7 @@ $all_subjects = $db->query("SELECT * FROM subjects ORDER BY name ASC")->fetchAll
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo ucfirst($action); ?> Teacher - Student Management System</title>
+    <title><?php echo ucfirst($action); ?> Teacher - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
     <style>
         .message { padding: 15px; margin: 15px 0; border-radius: 4px; }

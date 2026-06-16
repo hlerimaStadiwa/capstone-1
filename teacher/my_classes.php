@@ -22,14 +22,17 @@ if (!$teacher) {
 
 // Fetch Assigned Classes
 $query = "
-    SELECT r.*, 
+    SELECT DISTINCT r.*, 
            (SELECT COUNT(*) FROM students s WHERE s.classroom_id = r.id) as student_count
     FROM rooms r 
-    WHERE r.teacher_id = ? 
+    LEFT JOIN students s ON s.classroom_id = r.id
+    LEFT JOIN student_subjects ss ON ss.student_id = s.id
+    LEFT JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
+    WHERE r.teacher_id = ? OR ts.teacher_id = ? 
     ORDER BY r.room_number";
     
 $stmt = $db->prepare($query);
-$stmt->execute([$teacher['id']]);
+$stmt->execute([$teacher['id'], $teacher['id']]);
 ?>
 
 <!DOCTYPE html>
@@ -43,7 +46,7 @@ $stmt->execute([$teacher['id']]);
 <body>
     <div class="dashboard">
         <div class="sidebar">
-            <div class="logo">Silver Academy</div>
+            <div class="logo">Danborough</div>
             <div class="user-info" style="padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div class="avatar-circle" style="width: 60px; height: 60px; background: #27ae60; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin: 0 auto 10px; color: white;">
                     <?php echo strtoupper(substr($teacher['full_name'], 0, 1)); ?>
@@ -58,6 +61,7 @@ $stmt->execute([$teacher['id']]);
                 <li><a href="attendance.php">Mark Attendance</a></li>
                 <li><a href="attendance_history.php">Attendance History</a></li>
                 <li><a href="grades.php">Grades</a></li>
+                <li><a href="assignments.php">Assignments</a></li>
                 <li><a href="profile.php">My Profile</a></li>
                 <li><a href="../logout.php">Logout</a></li>
             </ul>
@@ -66,7 +70,7 @@ $stmt->execute([$teacher['id']]);
         <div class="main-content">
             <div class="page-header">
                 <h1>Assigned Classrooms</h1>
-                <p>Overview of classes under your supervision</p>
+                <p>Overview of classes under your supervision or instruction</p>
             </div>
             
             <div class="table-container">
@@ -76,18 +80,26 @@ $stmt->execute([$teacher['id']]);
                             <tr>
                                 <th>Class/Form</th>
                                 <th>Type</th>
+                                <th>Role</th>
                                 <th>Students Enrolled</th>
                                 <th>Capacity</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php while ($row = $stmt->fetch(PDO::FETCH_ASSOC)): ?>
+                            <?php while ($row = $stmt->fetch(PDO::FETCH_ASSOC)): 
+                                $role = ($row['teacher_id'] == $teacher['id']) ? 'Class Teacher' : 'Subject Teacher';
+                            ?>
                             <tr>
                                 <td><strong><?php echo htmlspecialchars($row['room_number']); ?></strong></td>
                                 <td><?php echo htmlspecialchars($row['room_type']); ?></td>
                                 <td>
-                                    <span class="badge"><?php echo $row['student_count']; ?></span>
+                                    <span class="badge" style="background: <?php echo ($role === 'Class Teacher') ? '#27ae60' : '#2980b9'; ?>; color: white;">
+                                        <?php echo $role; ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background: #7f8c8d; color: white;"><?php echo $row['student_count']; ?></span>
                                 </td>
                                 <td><?php echo $row['capacity']; ?></td>
                                 <td>

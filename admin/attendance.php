@@ -12,13 +12,22 @@ $database = new Database();
 $db = $database->getConnection();
 
 // Get filter parameters
+$classroom_id = isset($_GET['classroom_id']) ? $_GET['classroom_id'] : '';
 $student_id = isset($_GET['student_id']) ? $_GET['student_id'] : '';
+$date = isset($_GET['date']) ? $_GET['date'] : '';
 $month = isset($_GET['month']) ? $_GET['month'] : date('Y-m');
 $status = isset($_GET['status']) ? $_GET['status'] : '';
+
+$classrooms = $db->query("SELECT id, room_number FROM rooms WHERE room_type = 'Classroom' ORDER BY room_number ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 // Build WHERE clause
 $where_conditions = [];
 $params = [];
+
+if (!empty($classroom_id)) {
+    $where_conditions[] = "s.classroom_id = :classroom_id";
+    $params[':classroom_id'] = $classroom_id;
+}
 
 if (!empty($student_id)) {
     $where_conditions[] = "a.student_id = :student_id";
@@ -30,7 +39,10 @@ if (!empty($status)) {
     $params[':status'] = $status;
 }
 
-if (!empty($month)) {
+if (!empty($date)) {
+    $where_conditions[] = "a.date = :date";
+    $params[':date'] = $date;
+} elseif (!empty($month)) {
     $where_conditions[] = "TO_CHAR(a.date, 'YYYY-MM') = :month";
     $params[':month'] = $month;
 }
@@ -39,9 +51,10 @@ $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_c
 
 // Get attendance records
 $query = "
-    SELECT a.*, s.pin, s.full_name, u.username as recorded_by_name
+    SELECT a.*, s.pin, s.full_name, r.room_number as classroom_name, u.username as recorded_by_name
     FROM attendance a
     JOIN students s ON a.student_id = s.id
+    LEFT JOIN rooms r ON s.classroom_id = r.id
     LEFT JOIN users u ON a.recorded_by = u.id
     $where_clause
     ORDER BY a.date DESC, s.full_name
@@ -55,9 +68,15 @@ foreach ($params as $key => $value) {
 $stmt->execute();
 
 // Get all students for filter dropdown
-$students_query = "SELECT id, pin, full_name FROM students ORDER BY full_name";
-$students_stmt = $db->prepare($students_query);
-$students_stmt->execute();
+if (!empty($classroom_id)) {
+    $students_query = "SELECT id, pin, full_name FROM students WHERE classroom_id = ? ORDER BY full_name";
+    $students_stmt = $db->prepare($students_query);
+    $students_stmt->execute([$classroom_id]);
+} else {
+    $students_query = "SELECT id, pin, full_name FROM students ORDER BY full_name";
+    $students_stmt = $db->prepare($students_query);
+    $students_stmt->execute();
+}
 
 // Calculate statistics
 $stats_query = "
@@ -88,7 +107,7 @@ $months_stmt = $db->query($months_query);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance Reports - Student Management System</title>
+    <title>Attendance Reports - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
     <style>
         .reports-container {
@@ -196,6 +215,17 @@ $months_stmt = $db->query($months_query);
                 <form method="GET" action="">
                     <div class="filter-row">
                         <div class="form-group">
+                            <label for="classroom_id">Select Classroom</label>
+                            <select id="classroom_id" name="classroom_id" class="form-control" onchange="this.form.submit()">
+                                <option value="">All Classrooms</option>
+                                <?php foreach ($classrooms as $classroom): ?>
+                                    <option value="<?php echo $classroom['id']; ?>" <?php echo ($classroom_id == $classroom['id']) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($classroom['room_number']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-group">
                             <label for="student_id">Select Student</label>
                             <select id="student_id" name="student_id" class="form-control">
                                 <option value="">All Students</option>
@@ -208,6 +238,10 @@ $months_stmt = $db->query($months_query);
                             </select>
                         </div>
                         
+                        <div class="form-group">
+                            <label for="date">Select Date</label>
+                            <input id="date" type="date" name="date" class="form-control" max="<?php echo date('Y-m-d'); ?>" value="<?php echo htmlspecialchars($date); ?>">
+                        </div>
                         <div class="form-group">
                             <label for="month">Select Month</label>
                             <select id="month" name="month" class="form-control">

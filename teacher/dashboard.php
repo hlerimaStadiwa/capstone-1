@@ -21,19 +21,27 @@ if (!$teacher) {
 }
 
 // Fetch Assigned Classrooms
-$stmt = $db->prepare("SELECT COUNT(*) FROM rooms WHERE teacher_id = ?");
-$stmt->execute([$teacher['id']]);
+$stmt = $db->prepare("
+    SELECT COUNT(DISTINCT r.id) 
+    FROM rooms r
+    LEFT JOIN students s ON s.classroom_id = r.id
+    LEFT JOIN student_subjects ss ON ss.student_id = s.id
+    LEFT JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
+    WHERE r.teacher_id = ? OR ts.teacher_id = ?
+");
+$stmt->execute([$teacher['id'], $teacher['id']]);
 $assigned_rooms = $stmt->fetchColumn();
 
 // Fetch Total Students in assigned rooms
-// We need to join students with rooms where room.teacher_id = this teacher
 $stmt = $db->prepare("
-    SELECT COUNT(*) 
+    SELECT COUNT(DISTINCT s.id) 
     FROM students s
     JOIN rooms r ON s.classroom_id = r.id
-    WHERE r.teacher_id = ?
+    LEFT JOIN student_subjects ss ON ss.student_id = s.id
+    LEFT JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
+    WHERE r.teacher_id = ? OR ts.teacher_id = ?
 ");
-$stmt->execute([$teacher['id']]);
+$stmt->execute([$teacher['id'], $teacher['id']]);
 $total_students = $stmt->fetchColumn();
 ?>
 <!DOCTYPE html>
@@ -41,7 +49,7 @@ $total_students = $stmt->fetchColumn();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teacher Dashboard - Silver Academy</title>
+    <title>Teacher Dashboard - Danborough</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
     <style>
         .teacher-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
@@ -61,7 +69,7 @@ $total_students = $stmt->fetchColumn();
     <div class="dashboard">
         <!-- Sidebar -->
         <div class="sidebar">
-            <div class="logo">Silver Academy</div>
+            <div class="logo">Danborough</div>
             <div class="user-info" style="padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div class="avatar-circle" style="width: 60px; height: 60px; background: #27ae60; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin: 0 auto 10px; color: white;">
                     <?php echo strtoupper(substr($teacher['full_name'], 0, 1)); ?>
@@ -76,6 +84,7 @@ $total_students = $stmt->fetchColumn();
                 <li><a href="attendance.php">Mark Attendance</a></li>
                 <li><a href="attendance_history.php">Attendance History</a></li>
                 <li><a href="grades.php">Grades</a></li>
+                <li><a href="assignments.php">Assignments</a></li>
                 <li><a href="profile.php">My Profile</a></li>
                 <li><a href="../logout.php">Logout</a></li>
             </ul>
@@ -120,7 +129,7 @@ $total_students = $stmt->fetchColumn();
                         </div>
                         <div class="panel-body">
                             <?php
-                            $news_stmt = $db->query("SELECT * FROM news ORDER BY created_at DESC LIMIT 3");
+                            $news_stmt = $db->query("SELECT * FROM news WHERE title NOT ILIKE '%silver%' ORDER BY created_at DESC LIMIT 3");
                             if ($news_stmt && $news_stmt->rowCount() > 0) {
                                 while ($news = $news_stmt->fetch(PDO::FETCH_ASSOC)) {
                                     echo '<div class="news-item">';
@@ -200,14 +209,23 @@ $total_students = $stmt->fetchColumn();
                         <div class="panel-header"><h3 style="margin:0; font-size: 1.1em;">My Classes</h3></div>
                         <div class="panel-body">
                             <?php
-                            $rooms_stmt = $db->prepare("SELECT room_number FROM rooms WHERE teacher_id = ?");
-                            $rooms_stmt->execute([$teacher['id']]);
+                            $rooms_stmt = $db->prepare("
+                                SELECT DISTINCT r.room_number, r.teacher_id 
+                                FROM rooms r
+                                LEFT JOIN students s ON s.classroom_id = r.id
+                                LEFT JOIN student_subjects ss ON ss.student_id = s.id
+                                LEFT JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
+                                WHERE r.teacher_id = ? OR ts.teacher_id = ?
+                                ORDER BY r.room_number ASC
+                            ");
+                            $rooms_stmt->execute([$teacher['id'], $teacher['id']]);
                             while ($room = $rooms_stmt->fetch(PDO::FETCH_ASSOC)) {
+                                $role = ($room['teacher_id'] == $teacher['id']) ? 'Class Teacher' : 'Subject Teacher';
                                 echo '<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">';
                                 echo '<div style="width: 35px; height: 35px; background: #e8f5e9; color: #2e7d32; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.8em;">C</div>';
                                 echo '<div>';
                                 echo '<div style="font-size: 0.9em; font-weight: bold;">Room ' . htmlspecialchars($room['room_number']) . '</div>';
-                                echo '<div style="font-size: 0.7em; color: #7f8c8d;">Class Teacher</div>';
+                                echo '<div style="font-size: 0.7em; color: #7f8c8d;">' . $role . '</div>';
                                 echo '</div>';
                                 echo '</div>';
                             }

@@ -2,7 +2,7 @@
 class Database {
     private $host = "localhost";
     private $username = "postgres"; // Standard PostgreSQL user
-    private $password = "1234"; // Placeholder
+    private $password = "4436"; // Placeholder
     private $database = "student_management_system";
     private $port = "5432"; // Standard PostgreSQL port
     public $conn;

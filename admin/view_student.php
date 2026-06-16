@@ -47,6 +47,51 @@ if ($student['date_of_birth']) {
     $age = $today->diff($birthDate)->y;
 }
 
+// Fetch Classroom and Class Teacher
+$classroom_name = 'Not Assigned';
+$class_teacher_name = 'Not Assigned';
+if ($student['classroom_id']) {
+    $class_stmt = $db->prepare("
+        SELECT r.room_number, t.full_name as teacher_name 
+        FROM rooms r 
+        LEFT JOIN teachers t ON r.teacher_id = t.id 
+        WHERE r.id = ?
+    ");
+    $class_stmt->execute([$student['classroom_id']]);
+    if ($cls = $class_stmt->fetch(PDO::FETCH_ASSOC)) {
+        $classroom_name = $cls['room_number'];
+        $class_teacher_name = $cls['teacher_name'] ?: 'No Class Teacher';
+    }
+}
+
+// Fetch Enrolled Subjects
+$sub_stmt = $db->prepare("
+    SELECT s.name, s.code, s.id
+    FROM subjects s
+    JOIN student_subjects ss ON ss.subject_id = s.id
+    WHERE ss.student_id = ?
+    ORDER BY s.name ASC
+");
+$sub_stmt->execute([$student_id]);
+$enrolled_subjects = $sub_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch Subject Teachers
+$subject_teachers = [];
+if (!empty($enrolled_subjects)) {
+    $subject_ids = array_column($enrolled_subjects, 'id');
+    $placeholders = implode(',', array_fill(0, count($subject_ids), '?'));
+    $teacher_stmt = $db->prepare("
+        SELECT DISTINCT t.full_name, t.email, s.name as subject_name, s.code as subject_code
+        FROM teachers t
+        JOIN teacher_subjects ts ON ts.teacher_id = t.id
+        JOIN subjects s ON ts.subject_id = s.id
+        WHERE s.id IN ($placeholders)
+        ORDER BY s.name ASC, t.full_name ASC
+    ");
+    $teacher_stmt->execute($subject_ids);
+    $subject_teachers = $teacher_stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 // Handle Publishing Report
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_term'])) {
     $term_to_publish = $_POST['term_to_publish'];
@@ -67,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_term'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Student - Student Management System</title>
+    <title>View Student - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
     <style>
         .student-profile {
@@ -219,6 +264,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_term'])) {
                         ?>
                     </div>
                 </div>
+
+                <h3 style="margin-top: 30px;">Academic Class</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Classroom</span>
+                        <div class="info-value"><strong><?php echo htmlspecialchars($classroom_name); ?></strong></div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Class Teacher</span>
+                        <div class="info-value"><?php echo htmlspecialchars($class_teacher_name); ?></div>
+                    </div>
+                </div>
+
+                <h3 style="margin-top: 30px;">Enrolled Subjects & Teachers</h3>
+                <?php if (count($enrolled_subjects) > 0): ?>
+                    <div class="table-responsive" style="margin-bottom: 20px;">
+                        <table class="table" style="font-size: 0.9em;">
+                            <thead>
+                                <tr>
+                                    <th>Subject Code</th>
+                                    <th>Subject Name</th>
+                                    <th>Assigned Teachers</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($enrolled_subjects as $subj): ?>
+                                <tr>
+                                    <td><code><?php echo htmlspecialchars($subj['code']); ?></code></td>
+                                    <td><strong><?php echo htmlspecialchars($subj['name']); ?></strong></td>
+                                    <td>
+                                        <?php
+                                        // Filter teachers teaching this subject
+                                        $teachers = array_filter($subject_teachers, function($t) use ($subj) {
+                                            return $t['subject_name'] === $subj['name'];
+                                        });
+                                        if (count($teachers) > 0) {
+                                            $teacher_links = [];
+                                            foreach ($teachers as $t) {
+                                                $teacher_links[] = htmlspecialchars($t['full_name']) . ' (' . htmlspecialchars($t['email']) . ')';
+                                            }
+                                            echo implode('<br>', $teacher_links);
+                                        } else {
+                                            echo '<span style="color: #999; font-style: italic;">No teacher assigned</span>';
+                                        }
+                                        ?>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <p style="color: #666; font-style: italic; margin-bottom: 20px;">No subjects assigned to this student yet.</p>
+                <?php endif; ?>
                 
                 <h3 style="margin-top: 30px;">Academic Performance</h3>
                 <?php

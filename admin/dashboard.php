@@ -38,13 +38,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_news'])) {
         $message = '<div class="message error">Title and Content are required.</div>';
     }
 }
+
+// Handle News Edit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_news'])) {
+    $edit_id = intval($_POST['news_id'] ?? 0);
+    $edit_title = trim($_POST['title'] ?? '');
+    $edit_content = trim($_POST['content'] ?? '');
+    $edit_category = $_POST['category'] ?? 'General';
+    if ($edit_id && $edit_title && $edit_content) {
+        try {
+            $u = $db->prepare("UPDATE news SET title = ?, content = ?, category = ? WHERE id = ?");
+            $u->execute([$edit_title, $edit_content, $edit_category, $edit_id]);
+            $message = '<div class="message success">News updated successfully!</div>';
+        } catch (PDOException $e) {
+            $message = '<div class="message error">Error updating news: ' . htmlspecialchars($e->getMessage()) . '</div>';
+        }
+    } else {
+        $message = '<div class="message error">All fields are required to edit a news post.</div>';
+    }
+}
+
+// Handle News Delete
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_news'])) {
+    $del_id = intval($_POST['news_id'] ?? 0);
+    if ($del_id) {
+        try {
+            $d = $db->prepare("DELETE FROM news WHERE id = ?");
+            $d->execute([$del_id]);
+            $message = '<div class="message success">News deleted successfully.</div>';
+        } catch (PDOException $e) {
+            $message = '<div class="message error">Error deleting news: ' . htmlspecialchars($e->getMessage()) . '</div>';
+        }
+    } else {
+        $message = '<div class="message error">Invalid news id for deletion.</div>';
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - Student Management System</title>
+    <title>Admin Dashboard - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
 </head>
 <body>
@@ -56,34 +91,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_news'])) {
         <?php echo $message; ?>
         
         <!-- Statistics Cards -->
-        <div class="dashboard-cards">
+        <div class="stats-grid" style="margin-top: 20px;">
             <div class="card">
                 <h3>Total Students</h3>
                 <p class="stat-number"><?php echo $students_count; ?></p>
-                <a href="students.php" class="btn">Manage Students</a>
+                <a href="students.php" class="btn btn-small">Manage Students</a>
             </div>
             
             <div class="card">
                 <h3>Total Teachers</h3>
                 <p class="stat-number"><?php echo $teachers_count; ?></p>
-                <a href="teachers.php" class="btn">Manage Teachers</a>
+                <a href="teachers.php" class="btn btn-small">Manage Teachers</a>
             </div>
             
             <div class="card">
-                <h3>Available Rooms</h3>
+                <h3>Total Rooms</h3>
                 <p class="stat-number"><?php echo $rooms_count; ?></p>
-                <a href="rooms.php" class="btn">Manage Rooms</a>
+                <a href="rooms.php" class="btn btn-small">Manage Rooms</a>
             </div>
             
             <div class="card">
                 <h3>Today's Attendance</h3>
                 <p class="stat-number"><?php echo $today_attendance; ?></p>
-                <a href="attendance.php" class="btn">View Attendance</a>
+                <a href="attendance.php" class="btn btn-small">View Attendance</a>
             </div>
         </div>
 
         <!-- Quick Actions -->
-        <div class="quick-actions">
+        <div class="quick-actions" style="margin-top: 20px; margin-bottom: 20px;">
             <h2>Quick Actions</h2>
             <div class="action-buttons">
                 <a href="student_form.php" class="btn btn-primary">Add New Student</a>
@@ -134,80 +169,206 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_news'])) {
                     <button class="tab-btn" onclick="showNews('staff')">Staff Announcements</button>
                 </div>
 
-                <div id="general-news">
-                    <?php
-                    $news_query = "SELECT * FROM news WHERE category = 'General' ORDER BY created_at DESC LIMIT 5";
-                    $news_stmt = $db->query($news_query);
-                    
-                    if ($news_stmt->rowCount() > 0) {
-                        while ($news = $news_stmt->fetch(PDO::FETCH_ASSOC)) {
-                            echo '<div class="news-item">';
-                            echo '<h3>' . htmlspecialchars($news['title']) . '</h3>';
-                            echo '<p class="news-date">' . date('M d, Y', strtotime($news['created_at'])) . '</p>';
-                            echo '<p>' . nl2br(htmlspecialchars($news['content'])) . '</p>';
-                            echo '</div>';
+                <div class="scrollable-panel">
+                    <div id="general-news">
+                        <?php
+                        $news_query = "SELECT * FROM news WHERE category = 'General' AND title NOT ILIKE '%silver%' ORDER BY created_at DESC LIMIT 5";
+                        $news_stmt = $db->query($news_query);
+                        
+                        if ($news_stmt->rowCount() > 0) {
+                            while ($news = $news_stmt->fetch(PDO::FETCH_ASSOC)) {
+                                $content = $news['content'];
+                                if (strlen($content) > 100) {
+                                    $preview = substr($content, 0, 90) . '...';
+                                    echo '<div class="news-item toggleable">';
+                                    echo '<h3>' . htmlspecialchars($news['title']) . '</h3>';
+                                    echo '<p class="news-date">' . date('M d, Y', strtotime($news['created_at'])) . '</p>';
+                                    echo '<div class="news-content-preview">' . nl2br(htmlspecialchars($preview)) . ' <span class="read-more-link">Read More ▾</span></div>';
+                                    echo '<div class="news-content-full" style="display: none;">' . nl2br(htmlspecialchars($content)) . ' <span class="read-less-link">Show Less ▴</span></div>';
+                                    // Admin controls: Edit / Delete
+                                    echo '<div style="margin-top:8px; display:flex; gap:8px;">';
+                                    echo '<button type="button" class="btn" onclick="toggleEditForm(' . intval($news['id']) . ')">Edit</button>';
+                                    echo '<form method="POST" onsubmit="return confirm(\'Are you sure you want to delete this announcement?\')" style="display:inline;">';
+                                    echo '<input type="hidden" name="delete_news" value="1">';
+                                    echo '<input type="hidden" name="news_id" value="' . intval($news['id']) . '">';
+                                    echo '<button type="submit" class="btn btn-danger">Delete</button>';
+                                    echo '</form>';
+                                    echo '</div>';
+                                    // Hidden edit form
+                                    echo '<div id="edit-form-' . intval($news['id']) . '" style="display:none; margin-top:12px;">';
+                                    echo '<form method="POST">';
+                                    echo '<input type="hidden" name="edit_news" value="1">';
+                                    echo '<input type="hidden" name="news_id" value="' . intval($news['id']) . '">';
+                                    echo '<div class="form-group"><label>Title</label><input type="text" name="title" value="' . htmlspecialchars($news['title']) . '" required></div>';
+                                    echo '<div class="form-group"><label>Category</label><select name="category">';
+                                    $selGeneral = $news['category'] === 'General' ? 'selected' : '';
+                                    $selStaff = $news['category'] === 'Staff Announcement' ? 'selected' : '';
+                                    echo '<option value="General" ' . $selGeneral . '>General News</option>';
+                                    echo '<option value="Staff Announcement" ' . $selStaff . '>Staff Announcement</option>';
+                                    echo '</select></div>';
+                                    echo '<div class="form-group"><label>Content</label><textarea name="content" rows="3" required>' . htmlspecialchars($news['content']) . '</textarea></div>';
+                                    echo '<div style="display:flex; gap:8px;"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn" onclick="toggleEditForm(' . intval($news['id']) . ')">Cancel</button></div>';
+                                    echo '</form>';
+                                    echo '</div>';
+                                    echo '</div>';
+                                } else {
+                                    echo '<div class="news-item">';
+                                    echo '<h3>' . htmlspecialchars($news['title']) . '</h3>';
+                                    echo '<p class="news-date">' . date('M d, Y', strtotime($news['created_at'])) . '</p>';
+                                    echo '<p>' . nl2br(htmlspecialchars($content)) . '</p>';
+                                    // Admin controls for short items
+                                    echo '<div style="margin-top:8px; display:flex; gap:8px;">';
+                                    echo '<button type="button" class="btn" onclick="toggleEditForm(' . intval($news['id']) . ')">Edit</button>';
+                                    echo '<form method="POST" onsubmit="return confirm(\'Are you sure you want to delete this announcement?\')" style="display:inline;">';
+                                    echo '<input type="hidden" name="delete_news" value="1">';
+                                    echo '<input type="hidden" name="news_id" value="' . intval($news['id']) . '">';
+                                    echo '<button type="submit" class="btn btn-danger">Delete</button>';
+                                    echo '</form>';
+                                    echo '</div>';
+                                    // Hidden edit form
+                                    echo '<div id="edit-form-' . intval($news['id']) . '" style="display:none; margin-top:12px;">';
+                                    echo '<form method="POST">';
+                                    echo '<input type="hidden" name="edit_news" value="1">';
+                                    echo '<input type="hidden" name="news_id" value="' . intval($news['id']) . '">';
+                                    echo '<div class="form-group"><label>Title</label><input type="text" name="title" value="' . htmlspecialchars($news['title']) . '" required></div>';
+                                    echo '<div class="form-group"><label>Category</label><select name="category">';
+                                    $selGeneral = $news['category'] === 'General' ? 'selected' : '';
+                                    $selStaff = $news['category'] === 'Staff Announcement' ? 'selected' : '';
+                                    echo '<option value="General" ' . $selGeneral . '>General News</option>';
+                                    echo '<option value="Staff Announcement" ' . $selStaff . '>Staff Announcement</option>';
+                                    echo '</select></div>';
+                                    echo '<div class="form-group"><label>Content</label><textarea name="content" rows="3" required>' . htmlspecialchars($news['content']) . '</textarea></div>';
+                                    echo '<div style="display:flex; gap:8px;"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn" onclick="toggleEditForm(' . intval($news['id']) . ')">Cancel</button></div>';
+                                    echo '</form>';
+                                    echo '</div>';
+                                    echo '</div>';
+                                }
+                            }
+                        } else {
+                            echo '<p style="padding: 15px 0; color: #7f8c8d;">No general news announcements.</p>';
                         }
-                    } else {
-                        echo '<p>No general news announcements.</p>';
-                    }
-                    ?>
-                </div>
+                        ?>
+                    </div>
 
-                <div id="staff-news" style="display: none;">
-                    <?php
-                    $news_query = "SELECT * FROM news WHERE category = 'Staff Announcement' ORDER BY created_at DESC LIMIT 5";
-                    $news_stmt = $db->query($news_query);
-                    
-                    if ($news_stmt->rowCount() > 0) {
-                        while ($news = $news_stmt->fetch(PDO::FETCH_ASSOC)) {
-                            echo '<div class="news-item" style="border-left: 4px solid #4CAF50; padding-left: 15px;">';
-                            echo '<h3>' . htmlspecialchars($news['title']) . '</h3>';
-                            echo '<p class="news-date"><span class="badge badge-success">New Staff</span> ' . date('M d, Y', strtotime($news['created_at'])) . '</p>';
-                            echo '<p>' . nl2br(htmlspecialchars($news['content'])) . '</p>';
-                            echo '</div>';
+                    <div id="staff-news" style="display: none;">
+                        <?php
+                        $news_query = "SELECT * FROM news WHERE category = 'Staff Announcement' AND title NOT ILIKE '%silver%' ORDER BY created_at DESC LIMIT 5";
+                        $news_stmt = $db->query($news_query);
+                        
+                        if ($news_stmt->rowCount() > 0) {
+                            while ($news = $news_stmt->fetch(PDO::FETCH_ASSOC)) {
+                                $content = $news['content'];
+                                if (strlen($content) > 100) {
+                                    $preview = substr($content, 0, 90) . '...';
+                                    echo '<div class="news-item toggleable" style="border-left: 4px solid #4CAF50; padding-left: 15px;">';
+                                    echo '<h3>' . htmlspecialchars($news['title']) . '</h3>';
+                                    echo '<p class="news-date"><span class="badge badge-success">New Staff</span> ' . date('M d, Y', strtotime($news['created_at'])) . '</p>';
+                                    echo '<div class="news-content-preview">' . nl2br(htmlspecialchars($preview)) . ' <span class="read-more-link">Read More ▾</span></div>';
+                                    echo '<div class="news-content-full" style="display: none;">' . nl2br(htmlspecialchars($content)) . ' <span class="read-less-link">Show Less ▴</span></div>';
+                                    // Admin controls
+                                    echo '<div style="margin-top:8px; display:flex; gap:8px;">';
+                                    echo '<button type="button" class="btn" onclick="toggleEditForm(' . intval($news['id']) . ')">Edit</button>';
+                                    echo '<form method="POST" onsubmit="return confirm(\'Are you sure you want to delete this announcement?\')" style="display:inline;">';
+                                    echo '<input type="hidden" name="delete_news" value="1">';
+                                    echo '<input type="hidden" name="news_id" value="' . intval($news['id']) . '">';
+                                    echo '<button type="submit" class="btn btn-danger">Delete</button>';
+                                    echo '</form>';
+                                    echo '</div>';
+                                    // Hidden edit form
+                                    echo '<div id="edit-form-' . intval($news['id']) . '" style="display:none; margin-top:12px;">';
+                                    echo '<form method="POST">';
+                                    echo '<input type="hidden" name="edit_news" value="1">';
+                                    echo '<input type="hidden" name="news_id" value="' . intval($news['id']) . '">';
+                                    echo '<div class="form-group"><label>Title</label><input type="text" name="title" value="' . htmlspecialchars($news['title']) . '" required></div>';
+                                    echo '<div class="form-group"><label>Category</label><select name="category">';
+                                    $selGeneral = $news['category'] === 'General' ? 'selected' : '';
+                                    $selStaff = $news['category'] === 'Staff Announcement' ? 'selected' : '';
+                                    echo '<option value="General" ' . $selGeneral . '>General News</option>';
+                                    echo '<option value="Staff Announcement" ' . $selStaff . '>Staff Announcement</option>';
+                                    echo '</select></div>';
+                                    echo '<div class="form-group"><label>Content</label><textarea name="content" rows="3" required>' . htmlspecialchars($news['content']) . '</textarea></div>';
+                                    echo '<div style="display:flex; gap:8px;"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn" onclick="toggleEditForm(' . intval($news['id']) . ')">Cancel</button></div>';
+                                    echo '</form>';
+                                    echo '</div>';
+                                    echo '</div>';
+                                } else {
+                                    echo '<div class="news-item" style="border-left: 4px solid #4CAF50; padding-left: 15px;">';
+                                    echo '<h3>' . htmlspecialchars($news['title']) . '</h3>';
+                                    echo '<p class="news-date"><span class="badge badge-success">New Staff</span> ' . date('M d, Y', strtotime($news['created_at'])) . '</p>';
+                                    echo '<p>' . nl2br(htmlspecialchars($content)) . '</p>';
+                                    // Admin controls for short items
+                                    echo '<div style="margin-top:8px; display:flex; gap:8px;">';
+                                    echo '<button type="button" class="btn" onclick="toggleEditForm(' . intval($news['id']) . ')">Edit</button>';
+                                    echo '<form method="POST" onsubmit="return confirm(\'Are you sure you want to delete this announcement?\')" style="display:inline;">';
+                                    echo '<input type="hidden" name="delete_news" value="1">';
+                                    echo '<input type="hidden" name="news_id" value="' . intval($news['id']) . '">';
+                                    echo '<button type="submit" class="btn btn-danger">Delete</button>';
+                                    echo '</form>';
+                                    echo '</div>';
+                                    // Hidden edit form
+                                    echo '<div id="edit-form-' . intval($news['id']) . '" style="display:none; margin-top:12px;">';
+                                    echo '<form method="POST">';
+                                    echo '<input type="hidden" name="edit_news" value="1">';
+                                    echo '<input type="hidden" name="news_id" value="' . intval($news['id']) . '">';
+                                    echo '<div class="form-group"><label>Title</label><input type="text" name="title" value="' . htmlspecialchars($news['title']) . '" required></div>';
+                                    echo '<div class="form-group"><label>Category</label><select name="category">';
+                                    $selGeneral = $news['category'] === 'General' ? 'selected' : '';
+                                    $selStaff = $news['category'] === 'Staff Announcement' ? 'selected' : '';
+                                    echo '<option value="General" ' . $selGeneral . '>General News</option>';
+                                    echo '<option value="Staff Announcement" ' . $selStaff . '>Staff Announcement</option>';
+                                    echo '</select></div>';
+                                    echo '<div class="form-group"><label>Content</label><textarea name="content" rows="3" required>' . htmlspecialchars($news['content']) . '</textarea></div>';
+                                    echo '<div style="display:flex; gap:8px;"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn" onclick="toggleEditForm(' . intval($news['id']) . ')">Cancel</button></div>';
+                                    echo '</form>';
+                                    echo '</div>';
+                                    echo '</div>';
+                                }
+                            }
+                        } else {
+                            echo '<p style="padding: 15px 0; color: #7f8c8d;">No new staff announcements.</p>';
                         }
-                    } else {
-                        echo '<p>No new staff announcements.</p>';
-                    }
-                    ?>
+                        ?>
+                    </div>
                 </div>
             </div>
             
             <!-- Staff Contacts Section -->
             <div class="staff-section">
                 <h2>Staff Contacts</h2>
-                <?php
-                $staff_query = "SELECT full_name, role, email, phone, subject_specialization FROM teachers 
-                                JOIN users ON teachers.user_id = users.id 
-                                UNION 
-                                SELECT 'Administrator' as full_name, role, email, 'N/A' as phone, 'Administration' as subject_specialization 
-                                FROM users WHERE role='admin'";
-                // Actually, let's just stick to the teachers table for now as it has phones, and maybe admin
-                // Simpler query for just teachers table for now to ensure reliability if I assume admin doesn't have a profile yet
-                $staff_query = "SELECT full_name, email, phone, subject_specialization FROM teachers ORDER BY full_name";
-                
-                $staff_stmt = $db->query($staff_query);
-                
-                if ($staff_stmt->rowCount() > 0) {
-                    echo '<div class="table-responsive">';
-                    echo '<table class="table">';
-                    echo '<thead><tr><th>Name</th><th>Role/Subject</th><th>Phone</th></tr></thead>';
-                    echo '<tbody>';
-                    while ($staff = $staff_stmt->fetch(PDO::FETCH_ASSOC)) {
-                        echo '<tr>';
-                        echo '<td>' . htmlspecialchars($staff['full_name']) . '</td>';
-                        echo '<td>' . htmlspecialchars($staff['subject_specialization']) . '</td>';
-                        echo '<td>' . htmlspecialchars($staff['phone']) . '</td>';
-                        echo '</tr>';
+                <div class="scrollable-panel" style="margin-top: 15px;">
+                    <?php
+                    $staff_query = "SELECT full_name, email, phone, subject_specialization FROM teachers ORDER BY full_name";
+                    $staff_stmt = $db->query($staff_query);
+                    
+                    if ($staff_stmt->rowCount() > 0) {
+                        echo '<div class="compact-staff-list">';
+                        while ($staff = $staff_stmt->fetch(PDO::FETCH_ASSOC)) {
+                            $initial = strtoupper(substr($staff['full_name'], 0, 1));
+                            echo '<div class="compact-staff-card">';
+                            echo '  <div class="compact-staff-avatar">' . htmlspecialchars($initial) . '</div>';
+                            echo '  <div class="compact-staff-details">';
+                            echo '      <div class="compact-staff-name">' . htmlspecialchars($staff['full_name']) . '</div>';
+                            echo '      <div class="compact-staff-subtext">' . htmlspecialchars($staff['subject_specialization'] ?: 'General') . '</div>';
+                            echo '      <div class="compact-staff-contact">';
+                            if ($staff['phone']) {
+                                echo '      <span>Phone: ' . htmlspecialchars($staff['phone']) . '</span>';
+                            }
+                            if ($staff['email']) {
+                                echo '      <span>Email: ' . htmlspecialchars($staff['email']) . '</span>';
+                            }
+                            echo '      </div>';
+                            echo '  </div>';
+                            echo '</div>';
+                        }
+                        echo '</div>';
+                    } else {
+                        echo '<p style="color: #7f8c8d;">No staff contacts available.</p>';
                     }
-                    echo '</tbody></table>';
-                    echo '</div>';
-                } else {
-                    echo '<p>No staff contacts available.</p>';
-                }
-                ?>
+                    ?>
+                </div>
             </div>
         </div>
+        
         
         <style>
             .dashboard-grid {
@@ -252,6 +413,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_news'])) {
         const btns = document.querySelectorAll('.tab-btn');
         btns[0].classList.toggle('active', tab === 'general');
         btns[1].classList.toggle('active', tab === 'staff');
+    }
+
+    function toggleNewsItem(element) {
+        const preview = element.querySelector('.news-content-preview');
+        const full = element.querySelector('.news-content-full');
+        const isCollapsed = full.style.display === 'none';
+        
+        if (isCollapsed) {
+            full.style.display = 'block';
+            preview.style.display = 'none';
+            element.classList.add('expanded');
+        } else {
+            full.style.display = 'none';
+            preview.style.display = 'block';
+            element.classList.remove('expanded');
+        }
+    }
+
+    function toggleEditForm(id) {
+        var el = document.getElementById('edit-form-' + id);
+        if (!el) return;
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        if (el.style.display === 'block') el.scrollIntoView({ behavior: 'smooth' });
     }
 
     // Add logout confirmation

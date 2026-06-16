@@ -47,7 +47,8 @@ $subjects = $db->query("SELECT * FROM subjects ORDER BY name ASC")->fetchAll(PDO
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Manage Subjects - Student Management System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Subjects - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
 </head>
 <body>

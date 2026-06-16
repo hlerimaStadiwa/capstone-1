@@ -21,13 +21,22 @@ if (!$teacher) {
 }
 
 // Get Teacher's Assigned Classes for the filter
-$stmt_classes = $db->prepare("SELECT id, room_number FROM rooms WHERE teacher_id = ? ORDER BY room_number");
-$stmt_classes->execute([$teacher['id']]);
+$stmt_classes = $db->prepare("
+    SELECT DISTINCT r.id, r.room_number 
+    FROM rooms r
+    LEFT JOIN students s ON s.classroom_id = r.id
+    LEFT JOIN student_subjects ss ON ss.student_id = s.id
+    LEFT JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
+    WHERE r.teacher_id = ? OR ts.teacher_id = ?
+    ORDER BY r.room_number
+");
+$stmt_classes->execute([$teacher['id'], $teacher['id']]);
 $classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 
 // Get filter parameters
 $classroom_id = isset($_GET['classroom_id']) ? $_GET['classroom_id'] : '';
 $student_id = isset($_GET['student_id']) ? $_GET['student_id'] : '';
+$date = isset($_GET['date']) ? $_GET['date'] : '';
 $month = isset($_GET['month']) ? $_GET['month'] : date('Y-m');
 $status = isset($_GET['status']) ? $_GET['status'] : '';
 
@@ -35,9 +44,16 @@ $records = [];
 $all_students = [];
 
 if ($classroom_id) {
-    // Verify this classroom belongs to the teacher
-    $check = $db->prepare("SELECT id FROM rooms WHERE id = ? AND teacher_id = ?");
-    $check->execute([$classroom_id, $teacher['id']]);
+    // Verify this classroom belongs to or is taught by the teacher
+    $check = $db->prepare("
+        SELECT DISTINCT r.id 
+        FROM rooms r
+        LEFT JOIN students s ON s.classroom_id = r.id
+        LEFT JOIN student_subjects ss ON ss.student_id = s.id
+        LEFT JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
+        WHERE r.id = ? AND (r.teacher_id = ? OR ts.teacher_id = ?)
+    ");
+    $check->execute([$classroom_id, $teacher['id'], $teacher['id']]);
     
     if ($check->rowCount() > 0) {
         // Build WHERE clause
@@ -54,7 +70,10 @@ if ($classroom_id) {
             $params[':status'] = $status;
         }
 
-        if (!empty($month)) {
+        if (!empty($date)) {
+            $where_conditions[] = "a.date = :date";
+            $params[':date'] = $date;
+        } elseif (!empty($month)) {
             $where_conditions[] = "TO_CHAR(a.date, 'YYYY-MM') = :month";
             $params[':month'] = $month;
         }
@@ -66,6 +85,7 @@ if ($classroom_id) {
             SELECT a.*, s.pin, s.full_name, u.username as recorded_by_name
             FROM attendance a
             JOIN students s ON a.student_id = s.id
+            LEFT JOIN users u ON a.recorded_by = u.id
             $where_clause
             ORDER BY a.date DESC, s.full_name";
 
@@ -121,7 +141,7 @@ foreach($records as $r) {
     <div class="dashboard">
         <!-- Sidebar -->
         <div class="sidebar">
-            <div class="logo">Silver Academy</div>
+            <div class="logo">Danborough</div>
             <div class="user-info" style="padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div class="avatar-circle" style="width: 60px; height: 60px; background: #27ae60; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin: 0 auto 10px; color: white;">
                     <?php echo strtoupper(substr($teacher['full_name'], 0, 1)); ?>
@@ -136,6 +156,7 @@ foreach($records as $r) {
                 <li><a href="attendance.php">Mark Attendance</a></li>
                 <li><a href="attendance_history.php" class="active">Attendance History</a></li>
                 <li><a href="grades.php">Grades</a></li>
+                <li><a href="assignments.php">Assignments</a></li>
                 <li><a href="profile.php">My Profile</a></li>
                 <li><a href="../logout.php">Logout</a></li>
             </ul>
@@ -173,6 +194,10 @@ foreach($records as $r) {
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Record Date</label>
+                                <input type="date" name="date" max="<?php echo date('Y-m-d'); ?>" value="<?php echo htmlspecialchars($date); ?>">
                             </div>
                             <div class="form-group">
                                 <label>Record Month</label>

@@ -12,6 +12,19 @@ $database = new Database();
 $db = $database->getConnection();
 require_once '../includes/Logger.php'; // Include Logger
 
+// Helper to generate the next student PIN
+function generateStudentPin($db) {
+    $stmt = $db->query("SELECT pin FROM students WHERE pin LIKE 'STU%' ORDER BY LENGTH(pin) DESC, pin DESC LIMIT 1");
+    $last_pin = $stmt->fetchColumn();
+    if ($last_pin) {
+        $num = (int)substr($last_pin, 3);
+        $next_num = $num + 1;
+    } else {
+        $next_num = 1;
+    }
+    return 'STU' . str_pad($next_num, 3, '0', STR_PAD_LEFT);
+}
+
 // 2. Initialize Variables
 $error = '';
 $success = '';
@@ -21,15 +34,20 @@ $student_id = isset($_GET['id']) ? $_GET['id'] : '';
 $form_data = [
     'pin' => '', 'full_name' => '', 'email' => '', 'phone' => '', 
     'address' => '', 'date_of_birth' => '', 'gender' => '', 
-    'is_boarder' => false, 'room_id' => '', 'classroom_id' => '', 'enrollment_date' => date('Y-m-d')
+    'is_boarder' => false, 'room_id' => '', 'classroom_id' => '', 'enrollment_date' => date('Y-m-d'),
+    'initial_fee_amount' => '', 'initial_fee_date' => date('Y-m-d'), 'initial_fee_method' => 'Cash', 'initial_fee_type' => 'Boarding', 'initial_fee_remarks' => ''
 ];
+
+if ($action === 'add') {
+    $form_data['pin'] = generateStudentPin($db);
+}
 
 // 3. Handle Form Submission (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Get Data
     $form_data = [
-        'pin' => trim($_POST['pin']),
+        'pin' => $action === 'add' ? generateStudentPin($db) : trim($_POST['pin'] ?? ''),
         'full_name' => trim($_POST['full_name']),
         'email' => trim($_POST['email']),
         'phone' => trim($_POST['phone']),
@@ -39,7 +57,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'is_boarder' => isset($_POST['is_boarder']),
         'room_id' => (isset($_POST['is_boarder']) && !empty($_POST['room_id'])) ? $_POST['room_id'] : null,
         'classroom_id' => !empty($_POST['classroom_id']) ? $_POST['classroom_id'] : null,
-        'enrollment_date' => $_POST['enrollment_date']
+        'enrollment_date' => $_POST['enrollment_date'],
+        'initial_fee_amount' => trim($_POST['initial_fee_amount'] ?? ''),
+        'initial_fee_date' => $_POST['initial_fee_date'] ?? date('Y-m-d'),
+        'initial_fee_method' => $_POST['initial_fee_method'] ?? 'Cash',
+        'initial_fee_type' => $_POST['initial_fee_type'] ?? 'Boarding',
+        'initial_fee_remarks' => trim($_POST['initial_fee_remarks'] ?? '')
     ];
 
     // Re-calculate total_paid for enforcement if editing
@@ -51,83 +74,154 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     try {
-        // Enforce Room Allocation Rule
-        if ($form_data['room_id'] && $total_paid < 75.00) {
-            throw new Exception("Student has only paid $" . number_format($total_paid, 2) . ". Minimum 50% fee ($75.00) is required for room allocation.");
-        }
         // Validation
         if (empty($form_data['pin']) || empty($form_data['full_name']) || empty($form_data['email'])) {
             throw new Exception("PIN, Name, and Email are required.");
+        }
+
+        // Validate initial fee amount if provided
+        $initial_fee_amount = 0;
+        if ($form_data['initial_fee_amount'] !== '') {
+            $ifa_clean = str_replace(',', '', $form_data['initial_fee_amount']);
+            if (!is_numeric($ifa_clean) || floatval($ifa_clean) < 0) {
+                throw new Exception("Initial fee amount must be a non-negative number.");
+            }
+            $initial_fee_amount = round(floatval($ifa_clean), 2);
+        }
+
+        if (!empty($form_data['date_of_birth'])) {
+            $dob_ts = strtotime($form_data['date_of_birth']);
+            if ($dob_ts === false) {
+                throw new Exception("Date of birth is invalid.");
+            }
+            if ($dob_ts > strtotime(date('Y-m-d'))) {
+                throw new Exception("Date of birth cannot be in the future.");
+            }
+            if ((int)date('Y', $dob_ts) >= 2030) {
+                throw new Exception("Date of birth cannot be in the year 2030 or later.");
+            }
+        }
+
+        if (!empty($form_data['initial_fee_date'])) {
+            $fee_date_ts = strtotime($form_data['initial_fee_date']);
+            if ($fee_date_ts === false) {
+                throw new Exception("Initial fee date is invalid.");
+            }
+            if ($fee_date_ts > strtotime(date('Y-m-d'))) {
+                throw new Exception("Initial fee date cannot be in the future.");
+            }
+        }
+
+        if (!empty($form_data['enrollment_date'])) {
+            $enrollment_ts = strtotime($form_data['enrollment_date']);
+            if ($enrollment_ts === false) {
+                throw new Exception("Enrollment date is invalid.");
+            }
+            if ($enrollment_ts > strtotime(date('Y-m-d'))) {
+                throw new Exception("Enrollment date cannot be in the future.");
+            }
+        }
+
+        if ($form_data['room_id'] && $action === 'add') {
+            if ($initial_fee_amount < 75.00) {
+                throw new Exception("Hostel allocation requires at least 50% fee payment ($75.00).");
+            }
+        }
+
+        if ($form_data['room_id'] && $action === 'edit' && $total_paid < 75.00) {
+            throw new Exception("Student has only paid $" . number_format($total_paid, 2) . ". Minimum 50% fee ($75.00) is required for room allocation.");
         }
 
         $db->beginTransaction();
 
         if ($action === 'add') {
             // --- ADD NEW STUDENT ---
-            
-            // Generate Username
             $username_parts = explode('@', $form_data['email']);
             $username = strtolower($username_parts[0]);
-            
-            // Password: Use provided or default
             $raw_password = !empty($_POST['password']) ? $_POST['password'] : 'student123';
             $password = password_hash($raw_password, PASSWORD_DEFAULT);
 
-            // Create User
             $stmt = $db->prepare("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, 'student')");
             $stmt->execute([$username, $password, $form_data['email']]);
             $user_id = $db->lastInsertId();
 
-            // Create Student
             $stmt = $db->prepare("INSERT INTO students (user_id, pin, full_name, email, phone, address, date_of_birth, gender, enrollment_date, room_id, classroom_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $user_id, $form_data['pin'], $form_data['full_name'], $form_data['email'], $form_data['phone'], 
                 $form_data['address'], $form_data['date_of_birth'], $form_data['gender'], $form_data['enrollment_date'], $form_data['room_id'], $form_data['classroom_id']
             ]);
 
-            // Update Room Capacity
+            $new_student_id = $db->lastInsertId();
+
+            if (isset($_POST['subjects']) && is_array($_POST['subjects'])) {
+                $stmt_sub = $db->prepare("INSERT INTO student_subjects (student_id, subject_id) VALUES (?, ?)");
+                foreach ($_POST['subjects'] as $sub_id) {
+                    $stmt_sub->execute([$new_student_id, $sub_id]);
+                }
+            }
+
+            if ($initial_fee_amount > 0) {
+                $payment_stmt = $db->prepare("INSERT INTO fees (student_id, amount, payment_date, payment_method, fee_type, remarks, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $payment_stmt->execute([
+                    $new_student_id,
+                    $initial_fee_amount,
+                    $form_data['initial_fee_date'],
+                    $form_data['initial_fee_method'],
+                    $form_data['initial_fee_type'],
+                    $form_data['initial_fee_remarks'],
+                    $_SESSION['user_id']
+                ]);
+            }
+
             if ($form_data['room_id']) {
                 $db->prepare("UPDATE rooms SET available_beds = available_beds - 1 WHERE id = ?")->execute([$form_data['room_id']]);
             }
 
             Logger::log($_SESSION['user_id'], 'Create Student', "Created student account for {$form_data['full_name']} ({$username})");
+            $_SESSION['success'] = "Student added successfully! Username: <strong>$username</strong>";
+            $db->commit();
 
-            $success = "Student added successfully! Username: <strong>$username</strong>";
-            
-            // Reset for "Add Another" if needed, otherwise could redirect
             if (!isset($_POST['add_another'])) {
-                $db->commit(); // Commit before redirect
-                $_SESSION['success'] = $success;
                 header("Location: students.php");
                 exit();
-            } else {
-                // Clear form for next entry
-                $form_data = array_fill_keys(array_keys($form_data), '');
-                $form_data['enrollment_date'] = date('Y-m-d'); // Reset date
             }
+
+            $form_data = [
+                'pin' => generateStudentPin($db),
+                'full_name' => '',
+                'email' => '',
+                'phone' => '',
+                'address' => '',
+                'date_of_birth' => '',
+                'gender' => '',
+                'is_boarder' => false,
+                'room_id' => '',
+                'classroom_id' => '',
+                'enrollment_date' => date('Y-m-d'),
+                'initial_fee_amount' => '',
+                'initial_fee_date' => date('Y-m-d'),
+                'initial_fee_method' => 'Cash',
+                'initial_fee_type' => 'Boarding',
+                'initial_fee_remarks' => ''
+            ];
 
         } else {
             // --- EDIT EXISTING STUDENT ---
-            
-            // Get current room to handle capacity changes
             $stmt = $db->prepare("SELECT room_id, user_id FROM students WHERE id = ?");
             $stmt->execute([$student_id]);
             $current = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$current) throw new Exception("Student not found");
+            if (!$current) {
+                throw new Exception("Student not found");
+            }
 
-            // Update Student
-            $stmt = $db->prepare("
-                UPDATE students SET pin=?, full_name=?, email=?, phone=?, address=?, date_of_birth=?, gender=?, enrollment_date=?, room_id=?, classroom_id=? 
-                WHERE id=?
-            ");
+            $stmt = $db->prepare("UPDATE students SET pin=?, full_name=?, email=?, phone=?, address=?, date_of_birth=?, gender=?, enrollment_date=?, room_id=?, classroom_id=? WHERE id=?");
             $stmt->execute([
-                $form_data['pin'], $form_data['full_name'], $form_data['email'], $form_data['phone'], 
+                $form_data['pin'], $form_data['full_name'], $form_data['email'], $form_data['phone'],
                 $form_data['address'], $form_data['date_of_birth'], $form_data['gender'], $form_data['enrollment_date'], $form_data['room_id'], $form_data['classroom_id'],
                 $student_id
             ]);
 
-            // Update User Email and Password
             if ($current['user_id']) {
                 if (!empty($_POST['password'])) {
                     $res = $db->prepare("UPDATE users SET email = ?, password = ? WHERE id = ?");
@@ -137,17 +231,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            // Handle Room Swapping
             $old_room = $current['room_id'];
             $new_room = $form_data['room_id'];
-
             if ($old_room != $new_room) {
-                if ($old_room) $db->prepare("UPDATE rooms SET available_beds = available_beds + 1 WHERE id = ?")->execute([$old_room]);
-                if ($new_room) $db->prepare("UPDATE rooms SET available_beds = available_beds - 1 WHERE id = ?")->execute([$new_room]);
+                if ($old_room) {
+                    $db->prepare("UPDATE rooms SET available_beds = available_beds + 1 WHERE id = ?")->execute([$old_room]);
+                }
+                if ($new_room) {
+                    $db->prepare("UPDATE rooms SET available_beds = available_beds - 1 WHERE id = ?")->execute([$new_room]);
+                }
             }
 
-            // Save Subjects (For Edit)
-            // Strategy: Delete all and re-insert (Simpler) or Diff (More complex). We'll do delete & re-insert for now.
             $db->prepare("DELETE FROM student_subjects WHERE student_id = ?")->execute([$student_id]);
             if (isset($_POST['subjects']) && is_array($_POST['subjects'])) {
                 $stmt_sub = $db->prepare("INSERT INTO student_subjects (student_id, subject_id) VALUES (?, ?)");
@@ -157,29 +251,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             Logger::log($_SESSION['user_id'], 'Update Student', "Updated student details for {$form_data['full_name']} (ID: $student_id)");
-
+            $db->commit();
             $_SESSION['success'] = "Student updated successfully!";
-            $db->commit(); // Commit before redirect
             header("Location: students.php");
             exit();
         }
-
-        // Handle Subjects for ADD (New Student)
-        // Note: For 'add', $user_id is created but we need student ID from line 67
-        // Wait, line 67 gets user_id, but we need student_id which is not fetched until Insert. 
-        // Ah, INSERT INTO students doesn't return ID directly. We need $db->lastInsertId() AGAIN after the students insert.
-        if ($action === 'add') {
-             $new_student_id = $db->lastInsertId(); // This works because 'students' was the last insert
-             
-             if (isset($_POST['subjects']) && is_array($_POST['subjects'])) {
-                $stmt_sub = $db->prepare("INSERT INTO student_subjects (student_id, subject_id) VALUES (?, ?)");
-                foreach ($_POST['subjects'] as $sub_id) {
-                    $stmt_sub->execute([$new_student_id, $sub_id]);
-                }
-            }
-        }
-        
-        $db->commit();
 
     } catch (Exception $e) {
         $db->rollBack();
@@ -229,7 +305,7 @@ $all_subjects = $db->query("SELECT * FROM subjects ORDER BY name ASC")->fetchAll
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo ucfirst($action); ?> Student - Student Management System</title>
+    <title><?php echo ucfirst($action); ?> Student - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
     <style>
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -256,8 +332,8 @@ $all_subjects = $db->query("SELECT * FROM subjects ORDER BY name ASC")->fetchAll
                 
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Student PIN *</label>
-                        <input type="text" name="pin" value="<?php echo htmlspecialchars($form_data['pin']); ?>" required>
+                        <label>Student PIN <?php echo $action === 'add' ? '(Auto-generated)' : '*'; ?></label>
+                        <input type="text" name="pin" value="<?php echo htmlspecialchars($form_data['pin']); ?>" <?php echo $action === 'add' ? 'readonly' : 'required'; ?>>
                     </div>
                     <div class="form-group">
                         <label>Full Name *</label>
@@ -300,10 +376,51 @@ $all_subjects = $db->query("SELECT * FROM subjects ORDER BY name ASC")->fetchAll
                     <textarea name="address"><?php echo htmlspecialchars($form_data['address']); ?></textarea>
                 </div>
 
+                <?php if ($action === 'add'): ?>
+                <div class="form-group" style="background: #f8f9fd; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px; font-size: 1.05rem;">Initial Fee Payment</h3>
+                    <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label>Payment Amount</label>
+                            <input type="number" step="0.01" min="0.01" name="initial_fee_amount" value="<?php echo htmlspecialchars($form_data['initial_fee_amount']); ?>" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label>Payment Date</label>
+                            <input type="date" name="initial_fee_date" max="<?php echo date('Y-m-d'); ?>" value="<?php echo htmlspecialchars($form_data['initial_fee_date']); ?>">
+                        </div>
+                    </div>
+                    <div class="form-row" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label>Payment Method</label>
+                            <select name="initial_fee_method">
+                                <option value="Cash" <?php echo $form_data['initial_fee_method'] === 'Cash' ? 'selected' : ''; ?>>Cash</option>
+                                <option value="Bank Transfer" <?php echo $form_data['initial_fee_method'] === 'Bank Transfer' ? 'selected' : ''; ?>>Bank Transfer</option>
+                                <option value="Mobile Money" <?php echo $form_data['initial_fee_method'] === 'Mobile Money' ? 'selected' : ''; ?>>Mobile Money</option>
+                                <option value="Other" <?php echo $form_data['initial_fee_method'] === 'Other' ? 'selected' : ''; ?>>Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Fee Type</label>
+                            <select name="initial_fee_type">
+                                <option value="Tuition" <?php echo $form_data['initial_fee_type'] === 'Tuition' ? 'selected' : ''; ?>>Tuition</option>
+                                <option value="Boarding" <?php echo $form_data['initial_fee_type'] === 'Boarding' ? 'selected' : ''; ?>>Boarding</option>
+                                <option value="Uniform" <?php echo $form_data['initial_fee_type'] === 'Uniform' ? 'selected' : ''; ?>>Uniform</option>
+                                <option value="Books" <?php echo $form_data['initial_fee_type'] === 'Books' ? 'selected' : ''; ?>>Books</option>
+                                <option value="Other" <?php echo $form_data['initial_fee_type'] === 'Other' ? 'selected' : ''; ?>>Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Remarks</label>
+                        <textarea name="initial_fee_remarks"><?php echo htmlspecialchars($form_data['initial_fee_remarks']); ?></textarea>
+                    </div>
+                </div>
+                <?php endif; ?>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label>Date of Birth</label>
-                        <input type="date" name="date_of_birth" value="<?php echo $form_data['date_of_birth']; ?>">
+                        <input type="date" name="date_of_birth" max="<?php echo date('Y-m-d'); ?>" value="<?php echo $form_data['date_of_birth']; ?>">
                     </div>
                     <div class="form-group">
                         <label>Gender</label>
@@ -366,7 +483,7 @@ $all_subjects = $db->query("SELECT * FROM subjects ORDER BY name ASC")->fetchAll
 
                 <div class="form-group">
                     <label>Enrollment Date</label>
-                    <input type="date" name="enrollment_date" value="<?php echo $form_data['enrollment_date']; ?>" required>
+                    <input type="date" name="enrollment_date" max="<?php echo date('Y-m-d'); ?>" value="<?php echo $form_data['enrollment_date']; ?>" required>
                 </div>
 
                 <?php if ($action === 'add'): ?>

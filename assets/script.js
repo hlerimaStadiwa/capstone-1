@@ -1,6 +1,6 @@
 // assets/js/script.js - Complete and Safe
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Student Management System loaded successfully');
+    console.log('Danborough Student Management System loaded successfully');
     
     initializeApp();
 });
@@ -9,6 +9,7 @@ function initializeApp() {
     setupFormHandling();
     setupAutoHideMessages();
     setupConfirmations();
+    setupSidebarToggle();
     setupBasicValidation();
 }
 
@@ -81,6 +82,32 @@ function setupConfirmations() {
                 e.preventDefault();
             }
         });
+    });
+}
+
+function setupSidebarToggle() {
+    const toggle = document.querySelector('.sidebar-toggle');
+    const overlay = document.querySelector('.site-overlay');
+    const body = document.body;
+
+    if (!toggle || !overlay) {
+        return;
+    }
+
+    const closeSidebar = () => {
+        body.classList.remove('sidebar-open');
+    };
+
+    toggle.addEventListener('click', function() {
+        body.classList.toggle('sidebar-open');
+    });
+
+    overlay.addEventListener('click', closeSidebar);
+
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            closeSidebar();
+        }
     });
 }
 

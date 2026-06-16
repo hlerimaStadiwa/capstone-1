@@ -24,6 +24,51 @@ if (!$student) {
     exit();
 }
 
+// Fetch Classroom and Class Teacher
+$classroom_name = 'Not Assigned';
+$class_teacher_name = 'Not Assigned';
+if ($student['classroom_id']) {
+    $class_stmt = $db->prepare("
+        SELECT r.room_number, t.full_name as teacher_name 
+        FROM rooms r 
+        LEFT JOIN teachers t ON r.teacher_id = t.id 
+        WHERE r.id = ?
+    ");
+    $class_stmt->execute([$student['classroom_id']]);
+    if ($cls = $class_stmt->fetch(PDO::FETCH_ASSOC)) {
+        $classroom_name = $cls['room_number'];
+        $class_teacher_name = $cls['teacher_name'] ?: 'No Class Teacher';
+    }
+}
+
+// Fetch Enrolled Subjects
+$sub_stmt = $db->prepare("
+    SELECT s.name, s.code, s.id
+    FROM subjects s
+    JOIN student_subjects ss ON ss.subject_id = s.id
+    WHERE ss.student_id = ?
+    ORDER BY s.name ASC
+");
+$sub_stmt->execute([$student['id']]);
+$enrolled_subjects = $sub_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch Subject Teachers
+$subject_teachers = [];
+if (!empty($enrolled_subjects)) {
+    $subject_ids = array_column($enrolled_subjects, 'id');
+    $placeholders = implode(',', array_fill(0, count($subject_ids), '?'));
+    $teacher_stmt = $db->prepare("
+        SELECT DISTINCT t.full_name, t.email, s.name as subject_name, s.code as subject_code
+        FROM teachers t
+        JOIN teacher_subjects ts ON ts.teacher_id = t.id
+        JOIN subjects s ON ts.subject_id = s.id
+        WHERE s.id IN ($placeholders)
+        ORDER BY s.name ASC, t.full_name ASC
+    ");
+    $teacher_stmt->execute($subject_ids);
+    $subject_teachers = $teacher_stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 $message = '';
 $error = '';
 
@@ -73,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     <div class="dashboard">
         <!-- Sidebar -->
         <div class="sidebar">
-            <div class="logo">Silver Academy</div>
+            <div class="logo">Danborough</div>
             <div class="user-info" style="padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div class="avatar-circle" style="width: 60px; height: 60px; background: #3498db; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin: 0 auto 10px; color: white;">
                     <?php echo strtoupper(substr($_SESSION['username'], 0, 1)); ?>
@@ -85,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                 <li><a href="profile.php" class="active">My Profile</a></li>
                 <li><a href="grades.php">My Grades</a></li>
                 <li><a href="attendance.php">My Attendance</a></li>
+                <li><a href="assignments.php">My Assignments</a></li>
                 <li><a href="../logout.php">Logout</a></li>
             </ul>
         </div>
@@ -100,35 +146,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
             <div class="profile-layout">
                 <!-- Data Card -->
-                <div class="profile-detail-card">
-                    <h3>Personal Information</h3>
-                    <div class="detail-row">
-                        <span class="detail-label">Full Name</span>
-                        <span class="detail-value"><?php echo htmlspecialchars($student['full_name']); ?></span>
+                <div>
+                    <div class="profile-detail-card">
+                        <h3>Personal Information</h3>
+                        <div class="detail-row">
+                            <span class="detail-label">Full Name</span>
+                            <span class="detail-value"><?php echo htmlspecialchars($student['full_name']); ?></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Student PIN</span>
+                            <span class="detail-value"><?php echo htmlspecialchars($student['pin']); ?></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Email</span>
+                            <span class="detail-value"><?php echo htmlspecialchars($student['email']); ?></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Phone</span>
+                            <span class="detail-value"><?php echo htmlspecialchars($student['phone'] ?: 'N/A'); ?></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Gender</span>
+                            <span class="detail-value"><?php echo htmlspecialchars($student['gender']); ?></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Date of Birth</span>
+                            <span class="detail-value"><?php echo $student['date_of_birth'] ? date('M d, Y', strtotime($student['date_of_birth'])) : 'N/A'; ?></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Enrollment Date</span>
+                            <span class="detail-value"><?php echo date('M d, Y', strtotime($student['enrollment_date'])); ?></span>
+                        </div>
                     </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Student PIN</span>
-                        <span class="detail-value"><?php echo htmlspecialchars($student['pin']); ?></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Email</span>
-                        <span class="detail-value"><?php echo htmlspecialchars($student['email']); ?></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Phone</span>
-                        <span class="detail-value"><?php echo htmlspecialchars($student['phone'] ?: 'N/A'); ?></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Gender</span>
-                        <span class="detail-value"><?php echo htmlspecialchars($student['gender']); ?></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Date of Birth</span>
-                        <span class="detail-value"><?php echo $student['date_of_birth'] ? date('M d, Y', strtotime($student['date_of_birth'])) : 'N/A'; ?></span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Enrollment Date</span>
-                        <span class="detail-value"><?php echo date('M d, Y', strtotime($student['enrollment_date'])); ?></span>
+
+                    <div class="profile-detail-card" style="margin-top: 20px;">
+                        <h3>Academic Information</h3>
+                        <div class="detail-row">
+                            <span class="detail-label">Assigned Class</span>
+                            <span class="detail-value"><?php echo htmlspecialchars($classroom_name); ?></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Class Teacher</span>
+                            <span class="detail-value"><?php echo htmlspecialchars($class_teacher_name); ?></span>
+                        </div>
+                        <div class="detail-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                            <span class="detail-label">Enrolled Subjects</span>
+                            <span class="detail-value" style="font-weight: normal; color: #555; width: 100%;">
+                                <?php if (count($enrolled_subjects) > 0): ?>
+                                    <ul style="margin: 0; padding-left: 20px; font-size: 0.9em; line-height: 1.5; text-align: left;">
+                                        <?php foreach ($enrolled_subjects as $subj): ?>
+                                            <li>
+                                                <strong><?php echo htmlspecialchars($subj['name']); ?></strong> (<?php echo htmlspecialchars($subj['code']); ?>)
+                                                <?php
+                                                // Find subject teachers
+                                                $teachers = array_filter($subject_teachers, function($t) use ($subj) {
+                                                    return $t['subject_name'] === $subj['name'];
+                                                });
+                                                if (count($teachers) > 0) {
+                                                    $t_names = array_map(function($t) {
+                                                        return htmlspecialchars($t['full_name']);
+                                                    }, $teachers);
+                                                    echo ' - <span style="color: #7f8c8d; font-size: 0.85em;">taught by ' . implode(', ', $t_names) . '</span>';
+                                                }
+                                                ?>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php else: ?>
+                                    <span style="color: #7f8c8d; font-style: italic;">No subjects registered.</span>
+                                <?php endif; ?>
+                            </span>
+                        </div>
                     </div>
                 </div>
 

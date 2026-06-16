@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     <div class="dashboard">
         <!-- Sidebar -->
         <div class="sidebar">
-            <div class="logo">Silver Academy</div>
+            <div class="logo">Danborough</div>
             <div class="user-info" style="padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div class="avatar-circle" style="width: 60px; height: 60px; background: #27ae60; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin: 0 auto 10px; color: white;">
                     <?php echo strtoupper(substr($teacher['full_name'], 0, 1)); ?>
@@ -87,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                 <li><a href="attendance.php">Mark Attendance</a></li>
                 <li><a href="attendance_history.php">Attendance History</a></li>
                 <li><a href="grades.php">Grades</a></li>
+                <li><a href="assignments.php">Assignments</a></li>
                 <li><a href="profile.php" class="active">My Profile</a></li>
                 <li><a href="../logout.php">Logout</a></li>
             </ul>

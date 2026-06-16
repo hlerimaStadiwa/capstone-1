@@ -1,7 +1,7 @@
     </main>
     <footer>
         <div class="footer-content">
-            <p>&copy; <?php echo date('Y'); ?> Student Management System. All rights reserved.</p>
+            <p>&copy; <?php echo date('Y'); ?> Danborough College. All rights reserved.</p>
         </div>
     </footer>
     

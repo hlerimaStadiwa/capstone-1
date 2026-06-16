@@ -92,7 +92,7 @@ $stmt->execute();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Teachers - Student Management System</title>
+    <title>Manage Teachers - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
 </head>
 <body>

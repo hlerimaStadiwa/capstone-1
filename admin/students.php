@@ -80,7 +80,7 @@ $total_students = $db->query("SELECT COUNT(*) FROM students")->fetchColumn();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Students - Student Management System</title>
+    <title>Manage Students - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
 </head>
 <body>

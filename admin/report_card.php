@@ -84,7 +84,7 @@ $average = $count > 0 ? $total_score / $count : 0;
 
     <div class="report-container">
         <div class="header">
-            <h1 class="school-name">Silver Academy Student System</h1>
+            <h1 class="school-name">Danborough Student System</h1>
             <h2 class="report-title">Student Academic Report Card</h2>
             <p><strong>Academic Term:</strong> <?php echo htmlspecialchars($term); ?> | <strong>Date:</strong> <?php echo date('M d, Y'); ?></p>
         </div>

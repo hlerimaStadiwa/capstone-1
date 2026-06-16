@@ -91,7 +91,8 @@ $teachers = $db->query("SELECT id, full_name FROM teachers ORDER BY full_name")-
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title><?php echo ucfirst($action); ?> Room - Student Management System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo ucfirst($action); ?> Room - Danborough Student Management System</title>
     <link rel="stylesheet" href="../assets/style.css?v=<?php echo time(); ?>">
     <style>
         .form-container { max-width: 600px; margin: 40px auto; }

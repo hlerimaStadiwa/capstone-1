@@ -73,7 +73,7 @@ $records = $records_stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="dashboard">
         <!-- Sidebar -->
         <div class="sidebar">
-            <div class="logo">Silver Academy</div>
+            <div class="logo">Danborough</div>
             <div class="user-info" style="padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div class="avatar-circle" style="width: 60px; height: 60px; background: #3498db; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin: 0 auto 10px; color: white;">
                     <?php echo strtoupper(substr($_SESSION['username'], 0, 1)); ?>
@@ -85,6 +85,7 @@ $records = $records_stmt->fetchAll(PDO::FETCH_ASSOC);
                 <li><a href="profile.php">My Profile</a></li>
                 <li><a href="grades.php">My Grades</a></li>
                 <li><a href="attendance.php" class="active">My Attendance</a></li>
+                <li><a href="assignments.php">My Assignments</a></li>
                 <li><a href="../logout.php">Logout</a></li>
             </ul>
         </div>

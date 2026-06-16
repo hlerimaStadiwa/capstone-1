@@ -30,6 +30,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!empty($attendance_data)) {
         try {
+            $date_ts = strtotime($date);
+            if ($date_ts === false) {
+                throw new Exception('Invalid attendance date.');
+            }
+            if ($date_ts > strtotime(date('Y-m-d'))) {
+                throw new Exception('Attendance date cannot be in the future.');
+            }
             $db->beginTransaction();
             
             $stmt = $db->prepare("INSERT INTO attendance (student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) 
@@ -49,8 +56,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Fetch Teacher's Assigned Classes
-$stmt_classes = $db->prepare("SELECT id, room_number FROM rooms WHERE teacher_id = ? ORDER BY room_number");
-$stmt_classes->execute([$teacher['id']]);
+$stmt_classes = $db->prepare("
+    SELECT DISTINCT r.id, r.room_number 
+    FROM rooms r
+    LEFT JOIN students s ON s.classroom_id = r.id
+    LEFT JOIN student_subjects ss ON ss.student_id = s.id
+    LEFT JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
+    WHERE r.teacher_id = ? OR ts.teacher_id = ?
+    ORDER BY r.room_number
+");
+$stmt_classes->execute([$teacher['id'], $teacher['id']]);
 $classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 
 // Get Selected Class
@@ -59,17 +74,27 @@ $students = [];
 
 if ($selected_class_id) {
     // Verify class belongs to teacher
-    $stmt_check = $db->prepare("SELECT id FROM rooms WHERE id = ? AND teacher_id = ?");
-    $stmt_check->execute([$selected_class_id, $teacher['id']]);
+    $stmt_check = $db->prepare("
+        SELECT DISTINCT r.id 
+        FROM rooms r
+        LEFT JOIN students s ON s.classroom_id = r.id
+        LEFT JOIN student_subjects ss ON ss.student_id = s.id
+        LEFT JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
+        WHERE r.id = ? AND (r.teacher_id = ? OR ts.teacher_id = ?)
+    ");
+    $stmt_check->execute([$selected_class_id, $teacher['id'], $teacher['id']]);
     
     if ($stmt_check->rowCount() > 0) {
         $stmt_students = $db->prepare("
-            SELECT id, full_name, pin 
-            FROM students 
-            WHERE classroom_id = ? 
-            ORDER BY full_name ASC
+            SELECT DISTINCT s.id, s.full_name, s.pin 
+            FROM students s
+            JOIN rooms r ON s.classroom_id = r.id
+            LEFT JOIN student_subjects ss ON ss.student_id = s.id
+            LEFT JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
+            WHERE s.classroom_id = ? AND (r.teacher_id = ? OR ts.teacher_id = ?)
+            ORDER BY s.full_name ASC
         ");
-        $stmt_students->execute([$selected_class_id]);
+        $stmt_students->execute([$selected_class_id, $teacher['id'], $teacher['id']]);
         $students = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
     } else {
         $message = "<div class='message error'>Invalid class selected.</div>";
@@ -103,7 +128,7 @@ if ($selected_class_id) {
 <body>
     <div class="dashboard">
         <div class="sidebar">
-            <div class="logo">Silver Academy</div>
+            <div class="logo">Danborough</div>
             <div class="user-info" style="padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div class="avatar-circle" style="width: 60px; height: 60px; background: #27ae60; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin: 0 auto 10px; color: white;">
                     <?php echo strtoupper(substr($teacher['full_name'], 0, 1)); ?>
@@ -118,6 +143,7 @@ if ($selected_class_id) {
                 <li><a href="attendance.php" class="active">Mark Attendance</a></li>
                 <li><a href="attendance_history.php">Attendance History</a></li>
                 <li><a href="grades.php">Grades</a></li>
+                <li><a href="assignments.php">Assignments</a></li>
                 <li><a href="profile.php">My Profile</a></li>
                 <li><a href="../logout.php">Logout</a></li>
             </ul>
@@ -148,7 +174,7 @@ if ($selected_class_id) {
             <?php if ($selected_class_id && !empty($students)): ?>
             <form method="POST" action="attendance.php?class_id=<?php echo $selected_class_id; ?>">
                 <div class="form-group">
-                    <label>Date: <input type="date" name="date" value="<?php echo date('Y-m-d'); ?>" required></label>
+                    <label>Date: <input type="date" name="date" max="<?php echo date('Y-m-d'); ?>" value="<?php echo date('Y-m-d'); ?>" required></label>
                 </div>
 
                 <div class="card">
