@@ -1,16 +1,11 @@
 <?php
-session_start();
-
 // Check if user is logged in and is admin
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
     header("Location: ../login.php");
     exit();
 }
 
-require_once '../config/database.php';
-$database = new Database();
-$db = $database->getConnection();
-
+require_once '../config/init.php';
 // Get statistics
 $students_count = $db->query("SELECT COUNT(*) FROM students")->fetchColumn();
 $teachers_count = $db->query("SELECT COUNT(*) FROM users WHERE role = 'teacher'")->fetchColumn();

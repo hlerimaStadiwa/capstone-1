@@ -1,6 +1,4 @@
 <?php
-session_start();
-
 // Check if user is logged in and is admin
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
     header("Location: ../login.php");
@@ -15,10 +13,7 @@ if (!isset($_GET['id']) || empty($_GET['id'])) {
 
 $student_id = $_GET['id'];
 
-require_once '../config/database.php';
-$database = new Database();
-$db = $database->getConnection();
-
+require_once '../config/init.php';
 // Fetch student data with user info
 $query = "
     SELECT s.*, u.username, u.created_at as account_created,

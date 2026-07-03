@@ -1,14 +1,10 @@
 <?php
-session_start();
-require_once '../config/database.php';
+require_once '../config/init.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'student') {
     header("Location: ../login.php");
     exit();
 }
-
-$database = new Database();
-$db = $database->getConnection();
 
 // Fetch Student Info
 $stmt = $db->prepare("SELECT id, full_name FROM students WHERE user_id = ?");

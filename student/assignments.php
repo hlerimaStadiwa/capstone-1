@@ -1,14 +1,10 @@
 <?php
-session_start();
-require_once '../config/database.php';
+require_once '../config/init.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'student') {
     header("Location: ../login.php");
     exit();
 }
-
-$database = new Database();
-$db = $database->getConnection();
 
 // Get student data
 $query = "SELECT s.* FROM students s 
@@ -42,29 +38,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assignment_id'])) {
                 $upload_message = "<div class='message error'>Error: File size is larger than the allowed limit (5MB).</div>";
             } else {
                 if ($filetype === "application/pdf") {
-                    $upload_dir = '../uploads/assignments/';
-                    if (!is_dir($upload_dir)) {
-                        mkdir($upload_dir, 0777, true);
-                    }
-                    
                     $new_filename = 'assignment_' . $assignment_id . '_student_' . $student['id'] . '_' . time() . '.pdf';
-                    $target_file = $upload_dir . $new_filename;
                     
-                    if (move_uploaded_file($_FILES['pdf_file']['tmp_name'], $target_file)) {
-                        try {
-                            $sub_stmt = $db->prepare("
-                                INSERT INTO assignment_submissions (assignment_id, student_id, file_path, submitted_at, score, feedback, graded_at) 
-                                VALUES (?, ?, ?, CURRENT_TIMESTAMP, NULL, NULL, NULL)
-                                ON CONFLICT (assignment_id, student_id) 
-                                DO UPDATE SET file_path = EXCLUDED.file_path, submitted_at = CURRENT_TIMESTAMP, score = NULL, feedback = NULL, graded_at = NULL
-                            ");
-                            $sub_stmt->execute([$assignment_id, $student['id'], $new_filename]);
-                            $upload_message = "<div class='message success'>Assignment submitted successfully!</div>";
-                        } catch (PDOException $e) {
-                            $upload_message = "<div class='message error'>Database Error: " . $e->getMessage() . "</div>";
-                        }
-                    } else {
-                        $upload_message = "<div class='message error'>Error uploading file. Please try again.</div>";
+                    try {
+                        $storage = new SupabaseStorage();
+                        $fileData = file_get_contents($_FILES['pdf_file']['tmp_name']);
+                        
+                        // We will store the public URL in the database directly
+                        $publicUrl = $storage->uploadFile($new_filename, $fileData, 'application/pdf');
+                        
+                        $sub_stmt = $db->prepare("
+                            INSERT INTO assignment_submissions (assignment_id, student_id, file_path, submitted_at, score, feedback, graded_at) 
+                            VALUES (?, ?, ?, CURRENT_TIMESTAMP, NULL, NULL, NULL)
+                            ON CONFLICT (assignment_id, student_id) 
+                            DO UPDATE SET file_path = EXCLUDED.file_path, submitted_at = CURRENT_TIMESTAMP, score = NULL, feedback = NULL, graded_at = NULL
+                        ");
+                        $sub_stmt->execute([$assignment_id, $student['id'], $publicUrl]);
+                        $upload_message = "<div class='message success'>Assignment submitted successfully!</div>";
+                    } catch (Exception $e) {
+                        $upload_message = "<div class='message error'>Upload/Database Error: " . htmlspecialchars($e->getMessage()) . "</div>";
                     }
                 } else {
                     $upload_message = "<div class='message error'>Error: Only PDF files are allowed.</div>";
@@ -249,7 +241,7 @@ $assignments = $stmt_assignments->fetchAll(PDO::FETCH_ASSOC);
                                             <?php endif; ?>
                                         </div>
                                         <div>
-                                            <a href="../uploads/assignments/<?php echo htmlspecialchars($row['submission_file']); ?>" class="btn btn-small" target="_blank" style="background: #2e7d32; color: white; text-decoration: none; padding: 5px 10px; border-radius: 4px; font-size: 0.85em; font-weight: bold; display: inline-block;">Download Submission</a>
+                                            <a href="<?php echo str_starts_with($row['submission_file'], 'http') ? htmlspecialchars($row['submission_file']) : '../uploads/assignments/' . htmlspecialchars($row['submission_file']); ?>" class="btn btn-small" target="_blank" style="background: #2e7d32; color: white; text-decoration: none; padding: 5px 10px; border-radius: 4px; font-size: 0.85em; font-weight: bold; display: inline-block;">Download Submission</a>
                                             <?php if (!$is_overdue): ?>
                                                 <button onclick="toggleResubmit(<?php echo $row['id']; ?>)" class="btn btn-small" style="margin-left: 5px; padding: 5px 10px; font-size: 0.85em; border-radius: 4px;">Resubmit</button>
                                             <?php endif; ?>

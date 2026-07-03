@@ -1,15 +1,10 @@
 <?php
-session_start();
-
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
     header("Location: ../login.php");
     exit();
 }
 
-require_once '../config/database.php';
-$database = new Database();
-$db = $database->getConnection();
-
+require_once '../config/init.php';
 $message = '';
 $error = '';
 

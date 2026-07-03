@@ -1,6 +1,5 @@
 <?php
-session_start();
-require_once '../config/database.php';
+require_once '../config/init.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'student') {
     header("Location: ../login.php");
@@ -8,9 +7,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'student') {
 }
 
 // Get student data
-$database = new Database();
-$db = $database->getConnection();
-
 $query = "SELECT s.* FROM students s 
           JOIN users u ON s.user_id = u.id 
           WHERE u.id = ?";

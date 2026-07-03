@@ -1,10 +1,7 @@
 <?php
-require_once 'config/database.php';
+require_once 'config/init.php';
 
 try {
-    $database = new Database();
-    $db = $database->getConnection();
-    
     echo "Connected successfully to the database.\n";
     
     // Create grade_update_requests table

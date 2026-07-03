@@ -1,14 +1,10 @@
 <?php
-session_start();
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
     header("Location: ../login.php");
     exit();
 }
 
-require_once '../config/database.php';
-$database = new Database();
-$db = $database->getConnection();
-
+require_once '../config/init.php';
 // Pagination Setup
 $limit = 20;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;

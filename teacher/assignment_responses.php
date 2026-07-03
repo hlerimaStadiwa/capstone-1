@@ -1,14 +1,10 @@
 <?php
-session_start();
-require_once '../config/database.php';
+require_once '../config/init.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'teacher') {
     header("Location: ../login.php");
     exit();
 }
-
-$database = new Database();
-$db = $database->getConnection();
 
 $message = '';
 
@@ -239,7 +235,7 @@ if ($assignment['classroom_id']) {
                                     </td>
                                     <td>
                                         <?php if ($row['submission_file']): ?>
-                                            <a href="../uploads/assignments/<?php echo htmlspecialchars($row['submission_file']); ?>" 
+                                            <a href="<?php echo str_starts_with($row['submission_file'], 'http') ? htmlspecialchars($row['submission_file']) : '../uploads/assignments/' . htmlspecialchars($row['submission_file']); ?>" 
                                                class="btn-green" 
                                                target="_blank" 
                                                style="margin-bottom: 5px;">Download PDF</a>

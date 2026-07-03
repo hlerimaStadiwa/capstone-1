@@ -1,16 +1,11 @@
 <?php
-session_start();
-
 // Check if user is logged in and is admin
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
     header("Location: ../login.php");
     exit();
 }
 
-require_once '../config/database.php';
-$database = new Database();
-$db = $database->getConnection();
-
+require_once '../config/init.php';
 // Fetch all subjects for the filter dropdown
 try {
     $subj_stmt = $db->query("SELECT id, name FROM subjects ORDER BY name ASC");

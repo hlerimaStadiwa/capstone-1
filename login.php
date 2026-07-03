@@ -1,7 +1,5 @@
 <?php
 // login.php - Complete working version
-session_start();
-
 // Redirect if already logged in
 if (isset($_SESSION['user_id'])) {
     header("Location: index.php");
@@ -29,10 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 throw new Exception("Database configuration not found. Please run setup first.");
             }
             
-            require_once 'config/database.php';
-            $database = new Database();
-            $db = $database->getConnection();
-            
+            require_once 'config/init.php';
             // Check if users table exists (PostgreSQL compatible)
             $tableCheck = $db->query("SELECT 1 FROM information_schema.tables WHERE table_name = 'users'");
             if (!$tableCheck || $tableCheck->rowCount() == 0) {
@@ -130,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </style>
 </head>
 <body class="login-page">
-    <div class="form-container login-card">
+    <div class="form-container login-card animate-float">
         <h2 style="text-align: center; color: #2c3e50; margin-bottom: 10px;">Danborough College</h2>
         <h3 style="text-align: center; color: #7f8c8d; margin-bottom: 30px;">Login to Your Account</h3>
         

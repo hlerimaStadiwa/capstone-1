@@ -1,11 +1,19 @@
 <?php
 class Database {
-    private $host = "localhost";
-    private $username = "postgres"; // Standard PostgreSQL user
-    private $password = "4436"; // Placeholder
-    private $database = "student_management_system";
-    private $port = "5432"; // Standard PostgreSQL port
+    private $host;
+    private $username;
+    private $password;
+    private $database;
+    private $port;
     public $conn;
+
+    public function __construct() {
+        $this->host = getenv('DB_HOST') ?: "localhost";
+        $this->username = getenv('DB_USER') ?: "postgres";
+        $this->password = getenv('DB_PASS') ?: "4436";
+        $this->database = getenv('DB_NAME') ?: "student_management_system";
+        $this->port = getenv('DB_PORT') ?: "5432";
+    }
 
     public function getConnection() {
         $this->conn = null;

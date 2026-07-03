@@ -1,16 +1,11 @@
 <?php
-session_start();
-
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../login.php");
     exit();
 }
 
-require_once '../config/database.php';
-$database = new Database();
-$db = $database->getConnection();
-
+require_once '../config/init.php';
 // Check if student ID and term are provided
 $student_id = isset($_GET['student_id']) ? $_GET['student_id'] : '';
 $term = isset($_GET['term']) ? $_GET['term'] : '';

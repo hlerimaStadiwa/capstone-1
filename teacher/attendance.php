@@ -1,14 +1,10 @@
 <?php
-session_start();
-require_once '../config/database.php';
+require_once '../config/init.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'teacher') {
     header("Location: ../login.php");
     exit();
 }
-
-$database = new Database();
-$db = $database->getConnection();
 
 $message = '';
 

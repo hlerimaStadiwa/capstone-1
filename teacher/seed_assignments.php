@@ -1,8 +1,5 @@
 <?php
-require_once 'config/database.php';
-
-$database = new Database();
-$db = $database->getConnection();
+require_once '../config/init.php';
 
 // SEEDING DISABLED: Prevent automatic creation of sample assignments.
 echo "Seeding disabled: sample assignments are currently turned off.\n";
